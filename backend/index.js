@@ -1,5 +1,6 @@
 const dns = require('dns').promises;
 dns.setServers(['8.8.8.8', '1.1.1.1']);
+
 const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
@@ -10,17 +11,22 @@ const jwt = require("jsonwebtoken");
 dotenv.config();
 
 const app = express();
+
+// ✅ Allow frontend (important for deployment)
+app.use(cors({
+  origin: "*", // you can restrict later
+}));
+
 app.use(express.json());
-app.use(cors());
 
 // ================= DB =================
 mongoose.connect(process.env.MONGO_URI)
   .then(() => console.log("MongoDB Connected ✅"))
-  .catch(err => console.log(err));
+  .catch(err => console.log("DB Error:", err.message));
 
 // ================= MODELS =================
 
-// 🔹 User (Auth)
+// 🔹 User
 const userSchema = new mongoose.Schema({
   name: String,
   email: { type: String, unique: true },
@@ -44,18 +50,26 @@ const Student = mongoose.model("Student", studentSchema);
 
 // ================= AUTH MIDDLEWARE =================
 const authMiddleware = (req, res, next) => {
-  const header = req.headers.authorization;
-
-  if (!header) return res.status(401).json({ message: "No token" });
-
-  const token = header.split(" ")[1];
-
   try {
+    const header = req.headers.authorization;
+
+    if (!header) {
+      return res.status(401).json({ message: "No token provided" });
+    }
+
+    const token = header.split(" ")[1];
+
+    if (!token) {
+      return res.status(401).json({ message: "Invalid token format" });
+    }
+
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
     req.user = decoded;
     next();
-  } catch {
-    res.status(401).json({ message: "Invalid token" });
+
+  } catch (err) {
+    return res.status(401).json({ message: "Unauthorized" });
   }
 };
 
@@ -67,13 +81,14 @@ app.post("/api/auth/register", async (req, res) => {
     const { name, email, password } = req.body;
 
     const exist = await User.findOne({ email });
-    if (exist) return res.status(400).json({ message: "User exists" });
+    if (exist) return res.status(400).json({ message: "User already exists" });
 
     const hash = await bcrypt.hash(password, 10);
 
     const user = await User.create({ name, email, password: hash });
 
-    res.json(user);
+    res.json({ message: "Registered successfully" });
+
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -90,11 +105,14 @@ app.post("/api/auth/login", async (req, res) => {
     const match = await bcrypt.compare(password, user.password);
     if (!match) return res.status(400).json({ message: "Wrong password" });
 
-    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, {
-      expiresIn: "1d"
-    });
+    const token = jwt.sign(
+      { id: user._id },
+      process.env.JWT_SECRET,
+      { expiresIn: "1d" }
+    );
 
-    res.json({ token, user });
+    res.json({ token });
+
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -104,30 +122,51 @@ app.post("/api/auth/login", async (req, res) => {
 
 // 🔹 CREATE
 app.post("/api/students", authMiddleware, async (req, res) => {
-  const student = await Student.create(req.body);
-  res.json(student);
+  try {
+    const student = await Student.create(req.body);
+    res.json(student);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
 });
 
 // 🔹 READ ALL
 app.get("/api/students", authMiddleware, async (req, res) => {
-  const students = await Student.find();
-  res.json(students);
+  try {
+    const students = await Student.find().sort({ createdAt: -1 });
+    res.json(students);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
 });
 
 // 🔹 UPDATE
 app.put("/api/students/:id", authMiddleware, async (req, res) => {
-  const student = await Student.findByIdAndUpdate(
-    req.params.id,
-    req.body,
-    { new: true }
-  );
-  res.json(student);
+  try {
+    const student = await Student.findByIdAndUpdate(
+      req.params.id,
+      req.body,
+      { new: true }
+    );
+    res.json(student);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
 });
 
 // 🔹 DELETE
 app.delete("/api/students/:id", authMiddleware, async (req, res) => {
-  await Student.findByIdAndDelete(req.params.id);
-  res.json({ message: "Deleted" });
+  try {
+    await Student.findByIdAndDelete(req.params.id);
+    res.json({ message: "Deleted successfully" });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// ================= HEALTH CHECK =================
+app.get("/", (req, res) => {
+  res.send("API is running 🚀");
 });
 
 // ================= SERVER =================

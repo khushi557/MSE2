@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import axios from "axios";
 import "./App.css";
 
-const BASE = "http://localhost:5000/api";
+const BASE = "https://mse2-2.onrender.com";
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 const authHeader = (token) => ({ Authorization: `Bearer ${token}` });
