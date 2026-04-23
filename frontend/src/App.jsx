@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import axios from "axios";
 import "./App.css";
 
-const API = "http://localhost:5000/api";
+const API = "https://mse-22.onrender.com";
 
 // ─── Axios helper with token ───────────────────────────────────────────────
 const authAxios = () =>
